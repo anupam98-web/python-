@@ -14,9 +14,12 @@ class Mandate(models.Model):
         End_Date = models.DateField(default='')
         Number_of_openings = models.IntegerField()
         Jopb_Location = models.CharField(max_length = 300)
-        Designation_of_job = models.CharField(max_length=200, default='')
+        Designation_of_job = models.CharField(max_length=200, blank=True, null=True)
         ctc = models.IntegerField()
         Min_Exp = models.IntegerField()
         Max_Exp = models.IntegerField()
         CompanyID = models.CharField(max_length = 50)
+
+        def savedata(self):
+		        self.save()
 
