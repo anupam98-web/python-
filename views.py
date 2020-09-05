@@ -1,128 +1,85 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from .models import Mandate
 from .resources import JobResources
 from django.contrib import messages
 from tablib import Dataset
-from django.http import HttpResponse
-from .forms import Exlmapping
+from django.http import HttpResponse, JsonResponse
+from .forms import MandateForm
+import pandas as pd
+from django.views.decorators.csrf import csrf_exempt
+from django.db.models import Q
+from django.shortcuts import get_object_or_404
+import json
+import os
+import datetime
+from pprint import pprint
+#  from django.contrib.staticfiles.templatetags.staticfiles import static # no such file
+from django.forms.models import model_to_dict
+# from django.contrib.auth.views import login,logout # cannot import name 'login' from 'django.contrib.auth.views'
 
 # Create your views here.
+CSV_STORAGE = os.path.join(os.getcwd(), 'database', 'static', 'csv')
 
-def mapcolumns(request):
-    if request.method =='POST':
-         col = Exlmapping(request.POST)
-         # validation
-         if col.is_valid():
-            print('Form validation')
-            # it's a dictionary {'colum': col} so we are getting value of the key that are define in our form.
-            # this line will show the the value if it is verified
-            Job_ID = col.cleaned_data['Job_ID']
-            Company_Name = col.cleaned_data['Company_Name']
-            Job_Category = col.cleaned_data['Job_Category']
-            Job_Sub_Category = col.cleaned_data['Job_Sub_Category']
-            HR_Name = col.cleaned_data['HR_Name']
-            Job_Role = col.cleaned_data['Job_Role']
-            Skills_Required = col.cleaned_data['Skills_Required']
-            Creation_Date = col.cleaned_data['Creation_Date']
-            End_Date = col.cleaned_data['End_Date']
-            Number_of_openings = col.cleaned_data['Number_of_openings']
-            Jopb_Location = col.cleaned_data['Jopb_Location']
-            Designation_of_job = col.cleaned_data['Designation_of_job']
-            ctc = col.cleaned_data['ctc']
-            Min_Exp = col.cleaned_data['Min_Exp']
-            Max_Exp = col.cleaned_data['Max_Exp']
-            CompanyID = col.cleaned_data['CompanyID']
+
+@csrf_exempt
+def import_data(request):
+    if request.method == 'POST':
+        new_students = request.FILES['myfile']
+        if new_students.content_type == 'text/csv':
+            df = pd.read_csv(new_students)
+        else:
+            df = pd.read_excel(new_students) #make sure that there' no header
+        path_name = os.path.join('database', 'static', 'tempcsv', 'temp.csv')
+        df.to_csv(path_name, index=False)
+        return redirect('import/fieldmatching?df='+ path_name)
+    else:
+        return render(request, 'import_data.html')
+
+
+def fieldmatching(request):   
+    if request.method == 'POST':
+        path_name = request.POST['path_name']
+        df = pd.read_csv(path_name)
+        names = list(df.columns)
+        print(names)
+        if request.POST.get('checkBox') == None:   
+        ###To keep the same columns in case of matching 'fields' and ###'names', add a checkbox on the html page
+            matched = { key:request.POST.get(key, False) for key in names }
+            df.rename(columns = matched, inplace = True)
+ #       df.drop('id', axis=1, inplace=True) # Drop Remove rows or columns by specifying label names and corresponding axis, or by specifying directly index or column names. When using a multi-index, labels on different levels can be removed by specifying the level.
+        df.set_index("id", drop=True, inplace=True) # Set the DataFrame index (row labels) using one or more existing columns or arrays (of the correct length). The index can replace the existing index or expand on it.
+
+
+        dictionary = df.to_dict(orient="index")
+        for index, object in dictionary.items():
+            # model = MODEL_NAME()
+            model = Mandate()
+            for key,value in object.items():
+                setattr(model, key, value)
+            setattr(model, 'id', index)
+            model.save()
+        
+        return render(request, 'import_data.html')
+        # i am getting an error if i usre return redirect("import_data")
 
     else:
-        col = Exlmapping()
-        print('its from get request')
-
-    return render(request, 'mapexl.html', {'column': col})
-
-    mandate = Mandate()
-    map = { 
-            Job_ID : mandate.Job_ID,
-            Company_Name : mandate.Company_Name,
-            Job_Category : mandate.Job_Category,
-            Job_Sub_Category: mandate.Job_Sub_Category,
-            HR_Name : mandate.HR_Name,
-            Job_Role : mandate.Job_Role,
-            Skills_Required : mandate.Skills_Required,
-            Creation_Date : mandate.Creation_Date,
-            End_Date : mandate.End_Date,
-            Number_of_openings : mandate.Number_of_opening,
-            Jopb_Location: mandate.Jopb_Location,
-            Designation_of_job : mandate.Designation_of_job,
-            ctc : mandate.ctc,
-            Min_Exp : mandate.Min_Exp,
-            Max_Exp : mandate.Max_Exp,
-            CompanyID : mandate.CompanyID,
-          }
-    print(map)
-
-    if request.method== 'POST':
-        job_resources = JobResources()
-        dataset = Dataset()
-        new_job= request.FILES['myfile']
-
-        if not new_job.name.endswith('xlsx'):
-            messages.info(request,'wrong format')
-            return render(request,'mapexl.html')
-        imported_data = dataset.load(new_job.read(),format='xlsx')
-        for data in imported_data:
-            value = Mandate(
-                data[0],
-                data[1],
-                data[2],
-                data[4],
-                data[5],
-                data[6],
-                data[7],
-                data[8],
-                data[9],
-                data[10],
-                data[11],
-                data[12],
-                data[13],
-                data[14],
-                data[15],
-                data[16],
-                data[17]
-                )
-            value.save()
-    return render(request,'mapexl.html')
-
-
-def simple_upload(request):
-    if request.method== 'POST':
-        job_resources = JobResources()
-        dataset = Dataset()
-        new_job= request.FILES['myfile']
-
-        if not new_job.name.endswith('xlsx'):
-            messages.info(request,'wrong format')
-            return render(request,'upload.html')
-        imported_data = dataset.load(new_job.read(),format='xlsx')
-        for data in imported_data:
-            value = Mandate(
-                data[0],
-                data[1],
-                data[2],
-                data[4],
-                data[5],
-                data[6],
-                data[7],
-                data[8],
-                data[9],
-                data[10],
-                data[11],
-                data[12],
-                data[13],
-                data[14],
-                data[15],
-                data[16],
-                data[17]
-                )
-            value.save()
-    return render(request,'upload.html')
+        path_name = request.GET.get('df')
+        df = pd.read_csv(path_name)
+        names = list(df.columns)
+        fields = [field.name for field in Mandate._meta.get_fields()]
+        return render(request, 'fieldmatching.html', {'fields' : fields, 'path_name': path_name, 'names' : names})
+    
+    
         
+
+        
+         
+         
+        
+        
+        
+        
+        
+        
+         
+       
